@@ -5,7 +5,7 @@ import * as fb from './firebase.js';
 import * as ops from './ops.js';
 import {
   RECIPE_TYPES, PRESETS, MIN_QUESTIONS, UNIT_ICON, generateQuestions, mulberry32, newClassCode,
-  coinsAvailable, ownersOf, mapSizeFor,
+  coinsAvailable, ownersOf, mapSizeFor, normalizeRecipe,
 } from './core.js';
 import { MapView } from './mapview.js';
 
@@ -425,7 +425,7 @@ $('#mw-go').onclick = async () => {
 /* ─── Sommengroepen ─── */
 let SGE = null;
 $('#d-sgroups').onclick = () => {
-  const groups = Object.entries(KLAS.sgroups || {}).map(([id, d]) => ({ id, name: d.name, recipe: structuredClone(d.recipe), existing: true }));
+  const groups = Object.entries(KLAS.sgroups || {}).map(([id, d]) => ({ id, name: d.name, recipe: normalizeRecipe(d.recipe), existing: true }));
   const used = new Set(Object.values(KLAS.roster || {}).map(r => r.sg));
   SGE = { groups };
   SGE.editor = recipeEditor($('#msg-groups'), groups, {

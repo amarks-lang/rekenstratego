@@ -373,10 +373,25 @@ const GEN = {
   },
 };
 
+const asArray = v => Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : [];
+/**
+ * Firebase geeft lijsten soms terug als object ({0:…,1:…}). Dit maakt er
+ * altijd een net recept van met echte arrays.
+ */
+export function normalizeRecipe(recipe) {
+  return {
+    parts: asArray(recipe?.parts).filter(p => p && RECIPE_TYPES[p.type]).map(p => {
+      const out = { ...p };
+      if ('tafels' in out) out.tafels = asArray(out.tafels).map(Number);
+      return out;
+    }),
+  };
+}
+
 /** Genereert een unieke, geschudde sommenlijst [{q, a}] uit een recept. */
 export function generateQuestions(recipe, rng = Math.random) {
   const out = [], seen = new Set();
-  for (const part of recipe.parts || []) {
+  for (const part of normalizeRecipe(recipe).parts) {
     const gen = GEN[part.type];
     if (!gen) throw new Error('Onbekend somtype: ' + part.type);
     const p = { ...RECIPE_TYPES[part.type].defaults, ...part };
