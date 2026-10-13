@@ -21,7 +21,7 @@ export class MapView {
     this.resize();
   }
 
-  destroy() { this._ro.disconnect(); }
+  destroy() { this._ro.disconnect(); if (this._anim) cancelAnimationFrame(this._anim); this._anim = null; this.state.highlight = null; }
 
   resize() {
     const cssW = this.cv.clientWidth || 600;
@@ -119,7 +119,8 @@ export class MapView {
       ctx.fillStyle = '#fff'; ctx.fillText(label, cx, cy);
     }
 
-    if (highlight?.ids?.size && !this._anim) {
+    // knipperen alleen zolang er iets te kiezen is én de kaart zichtbaar is
+    if (highlight?.ids?.size && !this._anim && this.cv.offsetParent !== null) {
       this._anim = requestAnimationFrame(() => { this._anim = null; this.draw(); });
     }
   }
