@@ -75,7 +75,14 @@ async function loadClasses() {
   try { idx = (await fb.read(`${fb.ROOT}/classIndex`)) || {}; }
   catch (e) {
     show('login');
-    $('#login-msg').innerHTML = `Het account <b>${esc(USER?.email)}</b> heeft geen toegang tot het commandocentrum.`;
+    let diag = '';
+    try {
+      const t = await USER.getIdTokenResult();
+      diag = `<br><span class="mono" style="font-size:0.7rem;">${esc(e.message)} · provider=${esc(t.claims.firebase?.sign_in_provider)} · email_verified=${esc(t.claims.email_verified)}</span>`;
+    } catch {}
+    $('#login-msg').innerHTML = `Het account <b>${esc(USER?.email)}</b> heeft geen toegang tot het commandocentrum.${diag}
+      <br><button class="btn-ghost btn-mini" id="btn-relog">Ander account</button>`;
+    $('#btn-relog').onclick = async () => { await fb.logout(); USER = null; $('#login-msg').textContent = ''; };
     return;
   }
   const list = Object.entries(idx).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
