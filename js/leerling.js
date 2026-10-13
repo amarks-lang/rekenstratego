@@ -5,7 +5,7 @@ import * as fb from './firebase.js';
 import * as ops from './ops.js';
 import {
   pinHash, isValidPin, sameAnswer, milestones, coinsAvailable, UNITS, UNIT_ICON,
-  ownersOf, lootOptions, findNeutralCluster, neighbors, shuffle, RESPAWN_LAND,
+  ownersOf, lootOptions, findNeutralCluster, neighbors, shuffle, RESPAWN_LAND, isShielded, SHIELD_AT,
 } from './core.js';
 import { MapView } from './mapview.js';
 
@@ -272,6 +272,7 @@ function renderWar() {
     const t = total(), next = t ? milestones(t).find(m => (PRIV.n || 0) < m) : null;
     msg.textContent = next ? `Maak sommen om een munt te verdienen (bij ${next} goed).` : 'Je munten zijn op voor deze week.';
   } else { msg.textContent = `Je hebt ${coins} munt${coins > 1 ? 'en' : ''}: één aanval kost één munt.`; can = true; }
+  if (isShielded(myPub()) && !isEliminated()) msg.textContent += ` 🛡️ Jij bent ${SHIELD_AT} keer verslagen deze week, dus tot de nieuwe week kan niemand jou aanvallen.`;
   btn.disabled = !can;
   const waiting = Object.values(BATTLES).filter(b => b.att === SID && b.status !== 'done').map(b => nameOf(b.def));
   $('#pending').textContent = waiting.length ? '⏳ Wacht op verdediging van: ' + waiting.join(', ') : '';
@@ -284,11 +285,11 @@ $('#btn-attack').onclick = () => {
   const list = Object.entries(ROSTER).filter(([sid]) => sid !== SID)
     .sort((a, b) => a[1].name.localeCompare(b[1].name))
     .map(([sid, r]) => {
-      const p = PUB[sid] || {}, land = p.land || 0, used = !!hist[sid];
+      const p = PUB[sid] || {}, land = p.land || 0, used = !!hist[sid], shield = isShielded(p);
       if (land <= 0) return '';
-      return `<div class="target ${used ? 'used' : ''}" data-t="${esc(sid)}">
+      return `<div class="target ${used || shield ? 'used' : ''}" data-t="${esc(sid)}">
         <span><span class="dot" style="background:${esc(r.color)}"></span> ${esc(r.name)}${p.revenge ? ' 🔥' : ''}</span>
-        <span class="row" style="gap:6px;"><span class="chip land">⬡ ${land}</span>${used ? '<span class="chip red">al aangevallen</span>' : ''}</span>
+        <span class="row" style="gap:6px;"><span class="chip land">⬡ ${land}</span>${shield ? '<span class="chip sky">🛡️ beschermd</span>' : used ? '<span class="chip red">al aangevallen</span>' : ''}</span>
       </div>`;
     }).join('');
   $('#targets').innerHTML = list || '<p class="hint">Niemand om aan te vallen.</p>';
@@ -353,7 +354,7 @@ async function resolve(bid) {
     const b = BATTLES[bid];
     const attUnit = await fb.read(`${C()}/hidden/${bid}`);
     unitCache[bid] = attUnit;
-    const { updates } = ops.resolveUpdates(CID, bid, b, attUnit, PUB[b.def]?.land || 0);
+    const { updates } = ops.resolveUpdates(CID, bid, b, attUnit, PUB[b.def]?.land || 0, PUB[b.def]?.lost || 0);
     await fb.apply(updates);
   } catch (e) { /* de ander was ons voor — prima */ }
   setTimeout(() => resolving.delete(bid), 4000);

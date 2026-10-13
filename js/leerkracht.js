@@ -5,7 +5,7 @@ import * as fb from './firebase.js';
 import * as ops from './ops.js';
 import {
   RECIPE_TYPES, PRESETS, MIN_QUESTIONS, UNIT_ICON, generateQuestions, mulberry32, newClassCode,
-  coinsAvailable, ownersOf, mapSizeFor, normalizeRecipe,
+  coinsAvailable, ownersOf, mapSizeFor, normalizeRecipe, isShielded,
 } from './core.js';
 import { MapView } from './mapview.js';
 
@@ -286,9 +286,10 @@ function studentInfo(sid) {
   const land = pub.land || 0;
   const status = land === 0 && pub.status === 'respawned' && !(pub.respawnLeft > 0) ? ['💀', 'uitgeschakeld']
     : land === 0 && pub.status !== 'respawned' ? ['⏳', 'wacht op respawn']
-    : pub.revenge ? ['🔥', 'revenge'] : pub.status === 'respawned' ? ['♻️', 'gerespawnd'] : ['', 'actief'];
+    : isShielded(pub) ? ['🛡️', 'beschermd'] : pub.revenge ? ['🔥', 'revenge'] : pub.status === 'respawned' ? ['♻️', 'gerespawnd'] : ['', 'actief'];
+  const attacked = Object.values(KLAS.battles || {}).filter(b => b.def === sid).length;
   return { r, pub, priv, total, wrong, land, status, coins: coinsAvailable(priv, total), n: priv.n || 0,
-    online: !!KLAS.presence?.[sid], hasPin: !!KLAS.pinset?.[sid] };
+    online: !!KLAS.presence?.[sid], hasPin: !!KLAS.pinset?.[sid], attacked, lost: pub.lost || 0 };
 }
 
 function renderDash() {
@@ -333,7 +334,7 @@ function renderDash() {
     return `
       <div class="sg-head"><h3>${esc(def.name)}</h3><span class="hint">${sids.length} leerlingen · ${total} sommen</span></div>
       ${sids.length ? `<table class="list"><thead><tr>
-        <th></th><th>Naam</th><th>Land</th><th>Sommen</th><th>Fout</th><th>Munten</th><th>Aanvallen</th><th>Status</th></tr></thead><tbody>
+        <th></th><th>Naam</th><th>Land</th><th>Sommen</th><th>Fout</th><th>Munten</th><th>Aanvallen</th><th title="Zo vaak deze week aangevallen (verloren)">Aangevallen</th><th>Status</th></tr></thead><tbody>
         ${sids.map(sid => {
           const s = studentInfo(sid);
           return `<tr class="click" data-sid="${esc(sid)}">
@@ -345,6 +346,7 @@ function renderDash() {
             <td class="mono">${s.wrong || ''}</td>
             <td><span class="chip gold">🪙 ${s.coins}</span></td>
             <td class="mono">${s.priv.attacks || 0}</td>
+            <td class="mono" ${s.attacked >= 5 ? 'style="color:var(--alert);font-weight:800;" title="Valt op: vaak aangevallen deze week"' : ''}>${s.attacked || ''}${s.lost ? ` <span class="hint">(${s.lost} verl.)</span>` : ''}</td>
             <td>${s.status[0]} <span class="hint">${s.status[1]}</span></td>
           </tr>`;
         }).join('')}</tbody></table>` : '<p class="hint">Nog geen leerlingen in deze groep.</p>'}`;
@@ -374,6 +376,7 @@ function fillStudent() {
     ${worst.length ? `<div class="kv"><b>Lastigste sommen</b><span class="err-list" style="text-align:right;">${worst.join('<br>')}</span></div>` : ''}
     <div class="kv"><b>Munten</b><span>🪙 ${s.coins}${s.priv.bonus ? ` (waarvan ${s.priv.bonus} van jou)` : ''}</span></div>
     <div class="kv"><b>Aanvallen</b><span>${s.priv.attacks || 0} → ${hist.length ? esc(hist.join(', ')) : 'niemand'}</span></div>
+    <div class="kv"><b>Aangevallen door</b><span>${esc(Object.values(k.battles || {}).filter(b => b.def === SEL).map(b => (k.roster?.[b.att]?.name || '?') + (b.result === 'att' ? ' (verloren)' : '')).join(', ') || 'niemand')}</span></div>
     <div class="kv"><b>Status</b><span>${s.status[0]} ${s.status[1]}</span></div>
     <div class="kv"><b>Pincode</b><span>${s.hasPin ? '🔒 ingesteld' : 'nog niet gekozen'}</span></div>
     <div class="kv"><b>Online</b><span>${s.online ? '🟢 ja' : '⚪ nee'}</span></div>`;
@@ -413,7 +416,8 @@ $('#d-week').onclick = () => {
       ${refunds ? `<li>${refunds} aanval(len) zijn niet afgehandeld → aanvaller krijgt de munt terug.</li>` : ''}
       ${loot ? `<li>${loot} buit-hex(en) nog niet gekozen → worden automatisch gekozen.</li>` : ''}
       ${out.length ? `<li>Terug in het spel met 5 hexen: <b>${esc(out.join(', '))}</b>.</li>` : ''}
-      <li>Revenge en respawn worden gereset. De klascode blijft <b>${esc(KLAS.meta.code)}</b>.</li>
+      <li>Revenge, respawn en schilden 🛡️ worden gereset. De klascode blijft <b>${esc(KLAS.meta.code)}</b>.</li>
+      <li class="hint">Is de kaart bijna vol, dan staan de grootste landen een paar randhexen af, zodat er altijd ruimte is om terug te komen.</li>
     </ul>`;
   openModal('m-week');
 };

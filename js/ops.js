@@ -9,7 +9,7 @@ import {
   COLORS, START_LAND, RESPAWN_LAND, REJOIN_LAND, MAX_FREE_PICKS,
   newId, mulberry32, canonAnswer, milestones, battleResult, lootSize,
   mapSizeFor, generateMap, assignColors, buildAdjacency, generateQuestions, findNeutralCluster,
-  ownersOf, landCounts, lootOptions, neighbors,
+  ownersOf, landCounts, lootOptions, neighbors, ensureNeutral, NEUTRAL_RESERVE,
 } from './core.js';
 
 export const ROOT = 'v3';
@@ -47,7 +47,7 @@ export function createClass({ name, code, students, sgroups, seed = Date.now(), 
   students.forEach((s, i) => {
     const sid = sids[i];
     roster[sid] = { name: String(s.name).trim().slice(0, 40), sg: s.sg, color: colors[sid] };
-    pub[sid] = { land: land[sid] || 0, status: 'active', revenge: false, respawnLeft: 0 };
+    pub[sid] = { land: land[sid] || 0, status: 'active', revenge: false, respawnLeft: 0, lost: 0 };
     priv[sid] = { n: 0, attacks: 0, bonus: 0 };
   });
   for (const [hex, sid] of Object.entries(owners)) map[hex] = { o: sid, via: 'init' };
@@ -125,7 +125,7 @@ export function addStudentUpdates(cid, klas, { name, sg }, rng = Math.random) {
   const color = assignColors(owners, klas.meta.W, klas.meta.H, [sid], preset)[sid];
   const u = {
     [`${C}/roster/${sid}`]: { name: String(name).trim().slice(0, 40), sg, color },
-    [`${C}/public/${sid}`]: { land: cluster.length, status: 'active', revenge: false, respawnLeft: 0 },
+    [`${C}/public/${sid}`]: { land: cluster.length, status: 'active', revenge: false, respawnLeft: 0, lost: 0 },
     [`${C}/private/${sid}`]: { n: 0, attacks: 0, bonus: 0 },
   };
   for (const hex of cluster) u[`${C}/map/${hex}`] = { o: sid, via: 'init' };
@@ -176,23 +176,29 @@ export function newWeekUpdates(cid, klas, seed = Date.now()) {
     }
   }
 
-  // 2. Uitgeschakelden terugplaatsen
+  // 2. Genoeg neutraal land houden (voor respawns en terugkeerders):
+  //    is het te weinig, dan staan de grootste landen randhexen af.
   const land = landCounts(owners);
-  for (const sid of Object.keys(klas.roster || {})) {
-    if ((land[sid] || 0) > 0) continue;
+  const out = Object.keys(klas.roster || {}).filter(sid => !(land[sid] > 0));
+  for (const hex of ensureNeutral(owners, W, H, Math.ceil(W * H * NEUTRAL_RESERVE) + out.length * REJOIN_LAND)) {
+    u[`${C}/map/${hex}`] = null;
+  }
+
+  // 3. Uitgeschakelden terugplaatsen
+  for (const sid of out) {
     for (const hex of findNeutralCluster(owners, W, H, REJOIN_LAND, rng)) {
       owners[hex] = sid; u[`${C}/map/${hex}`] = { o: sid, via: 'init' };
     }
   }
 
-  // 3. Per leerling resetten
+  // 4. Per leerling resetten
   const finalLand = landCounts(owners);
   for (const sid of Object.keys(klas.roster || {})) {
-    u[`${C}/public/${sid}`] = { land: finalLand[sid] || 0, status: 'active', revenge: false, respawnLeft: 0 };
+    u[`${C}/public/${sid}`] = { land: finalLand[sid] || 0, status: 'active', revenge: false, respawnLeft: 0, lost: 0 };
     u[`${C}/private/${sid}`] = { n: 0, attacks: 0, bonus: refunds[sid] || 0 };
   }
 
-  // 4. Nieuwe sommen
+  // 5. Nieuwe sommen
   for (const [sg, def] of Object.entries(klas.sgroups || {})) {
     Object.assign(u, questionSetUpdates(cid, sg, generateQuestions(def.recipe, rng)));
   }
@@ -264,13 +270,16 @@ export function defendUpdates(cid, bid, defUnit) {
  * Stap 2 (aanvaller óf verdediger): uitslag + buit vastleggen.
  * attUnit = hidden/{bid} (leesbaar na de verdediging), defLand = huidig land verdediger.
  */
-export function resolveUpdates(cid, bid, battle, attUnit, defLand) {
+export function resolveUpdates(cid, bid, battle, attUnit, defLand, defLost = 0) {
   const B = `${cls(cid)}/battles/${bid}`;
   const result = battleResult(attUnit, battle.defUnit);
   const u = { [`${B}/status`]: 'done', [`${B}/result`]: result };
   if (result === 'att') {
     const n = lootSize(defLand, battle.rev === true);
     u[`${B}/n`] = n; u[`${B}/left`] = n; u[`${B}/fr`] = 0;
+    // telt mee voor het schild van de verdediger
+    u[`${cls(cid)}/public/${battle.def}/lost`] = (defLost || 0) + 1;
+    u[`${cls(cid)}/public/${battle.def}/lb`] = bid;
   }
   return { updates: u, result };
 }

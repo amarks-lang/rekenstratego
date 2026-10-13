@@ -13,6 +13,8 @@ export const REVENGE_PCT = 0.5;      // buit bij winst in revenge mode
 export const MAX_FREE_PICKS = 2;     // eerste keuze + één keer opnieuw beginnen
 export const NEUTRAL_SHARE = 0.15;   // deel van de kaart dat neutraal blijft
 export const MIN_QUESTIONS = 6;      // minder sommen geeft rare mijlpalen
+export const SHIELD_AT = 2;          // na zoveel verloren verdedigingen per week: beschermd
+export const NEUTRAL_RESERVE = 0.10; // bij een nieuwe week minstens zoveel neutraal land
 
 export const UNITS = ['maarschalk', 'generaal', 'spion'];
 export const UNIT_ICON = { maarschalk: '🎖️', generaal: '⚔️', spion: '🕵️' };
@@ -260,6 +262,33 @@ export function findNeutralCluster(owners, W, H, size, rng = Math.random) {
   }
   return cluster;
 }
+
+/**
+ * Zorgt dat er minstens `need` neutrale hexen zijn. Zo niet, dan staat steeds
+ * het grootste land een randhex af (bij voorkeur een hex naast neutraal land of
+ * aan de kaartrand, met zo min mogelijk eigen buren). Past `owners` aan en
+ * geeft de vrijgemaakte hexen terug.
+ */
+export function ensureNeutral(owners, W, H, need) {
+  const freed = [];
+  let neutral = W * H - Object.keys(owners).length;
+  while (neutral < need) {
+    const land = landCounts(owners);
+    const [big] = Object.entries(land).sort((a, b) => b[1] - a[1])[0] || [];
+    if (!big || land[big] <= 1) break;
+    const hexes = Object.keys(owners).filter(h => owners[h] === big);
+    const score = h => {
+      const nb = neighbors(h, W, H);
+      const own = nb.filter(n => owners[n] === big).length;
+      const open = nb.filter(n => !owners[n]).length + (6 - nb.length);
+      return own * 2 - open * 3;
+    };
+    const pick = hexes.sort((a, b) => score(a) - score(b))[0];
+    delete owners[pick]; freed.push(pick); neutral++;
+  }
+  return freed;
+}
+export const isShielded = pub => (pub?.lost || 0) >= SHIELD_AT;
 
 /**
  * Welke hexen mag de winnaar nu kiezen?

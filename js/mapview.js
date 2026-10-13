@@ -2,7 +2,7 @@
 //  Rekenstratego 3.0 — mapview.js
 //  Tekent de hexkaart op een <canvas>. Gedeeld door leerkracht en leerling.
 // ════════════════════════════════════════════════════════════════════
-import { allHexes, neighbors, parseHex } from './core.js';
+import { allHexes, neighbors, parseHex, isShielded } from './core.js';
 
 const NEUTRAL = '#E7ECF6';
 const SQ3 = Math.sqrt(3);
@@ -115,6 +115,7 @@ export class MapView {
       const cy = cells.reduce((a, id) => a + this._centers[id].y, 0) / cells.length;
       let label = r.name.length > 10 ? r.name.slice(0, 9) + '…' : r.name;
       if (pub[sid]?.revenge) label += ' 🔥';
+      if (isShielded(pub[sid])) label += ' 🛡️';
       ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(26,33,66,0.7)'; ctx.strokeText(label, cx, cy);
       ctx.fillStyle = '#fff'; ctx.fillText(label, cx, cy);
     }
