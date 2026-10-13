@@ -20,9 +20,9 @@ export const BEATS = { maarschalk: 'generaal', generaal: 'spion', spion: 'maarsc
 
 export const COLORS = [
   '#FF5D77', '#4F6BFF', '#14B87C', '#F7A312', '#9B5BFF', '#06B6D4',
-  '#FB7C32', '#EC4FA8', '#84CC16', '#64748B', '#E11D48', '#2563EB',
-  '#059669', '#CA8A04', '#7C3AED', '#0891B2', '#EA580C', '#DB2777',
-  '#65A30D', '#475569', '#F43F5E', '#3B82F6', '#10B981', '#A855F7',
+  '#FB7C32', '#EC4FA8', '#84CC16', '#64748B', '#E11D48', '#1E40AF',
+  '#047857', '#CA8A04', '#6D28D9', '#0E7490', '#C2410C', '#BE185D',
+  '#4D7C0F', '#334155', '#FACC15', '#8B5E34', '#2DD4BF', '#C084FC',
 ];
 
 /* ─────────────── Id's, random, hashing ─────────────── */
@@ -274,6 +274,47 @@ export function lootOptions(owners, W, H, battle) {
   const first = battle.left === battle.n;
   const canFree = (battle.fr || 0) < MAX_FREE_PICKS && (first || adjacent.length === 0);
   return { adjacent, free: canFree ? defHexes : [], stuck: !adjacent.length && !canFree };
+}
+
+/* ─────────────── Kleuren ─────────────── */
+function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+/** Waargenomen kleurverschil ("redmean"-benadering). */
+export function colorDistance(a, b) {
+  const [r1, g1, b1] = rgb(a), [r2, g2, b2] = rgb(b), rm = (r1 + r2) / 2;
+  return Math.sqrt((2 + rm / 256) * (r1 - r2) ** 2 + 4 * (g1 - g2) ** 2 + (2 + (255 - rm) / 256) * (b1 - b2) ** 2);
+}
+/**
+ * Geeft leerlingen kleuren zodat buren (en buren-van-buren) zo verschillend
+ * mogelijk zijn. preset = al vastliggende kleuren {sid: kleur}.
+ */
+export function assignColors(owners, W, H, sids, preset = {}, palette = COLORS) {
+  const near = {}, far = {};
+  const all = [...new Set([...sids, ...Object.keys(preset)])];
+  for (const s of all) { near[s] = new Set(); far[s] = new Set(); }
+  for (const [id, o] of Object.entries(owners)) {
+    if (!near[o]) continue;
+    for (const n of neighbors(id, W, H)) {
+      const p = owners[n];
+      if (p && p !== o && near[p]) { near[o].add(p); near[p].add(o); }
+      for (const n2 of neighbors(n, W, H)) { const q = owners[n2]; if (q && q !== o && far[q]) { far[o].add(q); far[q].add(o); } }
+    }
+  }
+  const colors = { ...preset };
+  const order = sids.filter(s => !colors[s]).sort((a, b) => near[b].size - near[a].size);
+  for (const s of order) {
+    const used = new Set(Object.values(colors));
+    const pool = palette.filter(c => !used.has(c));
+    const cands = pool.length ? pool : palette;
+    let best = cands[0], bestScore = -Infinity;
+    for (const c of cands) {
+      const dn = Math.min(Infinity, ...[...near[s]].filter(x => colors[x]).map(x => colorDistance(c, colors[x])));
+      const df = Math.min(Infinity, ...[...far[s]].filter(x => colors[x]).map(x => colorDistance(c, colors[x])));
+      const score = Math.min(dn, 9999) + 0.35 * Math.min(df, 9999);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    colors[s] = best;
+  }
+  return colors;
 }
 
 /* ─────────────── Sommen-recepten ───────────────

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rekenstratego — Commandocentrum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  #dash-grid{display:grid; grid-template-columns:1fr 340px; gap:18px; align-items:start;}
+  @media(max-width:1000px){ #dash-grid{grid-template-columns:1fr;} }
+  .codebox{background:#EEF2FF; border:2px dashed var(--sky); border-radius:14px; padding:6px 18px; text-align:center;}
+  .codebox b{font-family:var(--font-head); font-weight:800; font-size:1.7rem; color:var(--sky); letter-spacing:6px;}
+  .codebox small{display:block; font-family:var(--mono); font-size:0.58rem; color:var(--mut); letter-spacing:2px;}
+  .klas-card{cursor:pointer; transition:.12s;}
+  .klas-card:hover{transform:translateY(-2px); border-color:var(--sky);}
+  #klas-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px;}
+  .sg-card{border:2px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; background:#fff;}
+  .part{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px; background:var(--panel2); border-radius:12px; margin:8px 0;}
+  .part .params{display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:0.85rem; font-weight:700; color:var(--mut);}
+  .part input.small{width:64px;}
+  .tchip{padding:5px 9px; border-radius:9px; border:2px solid var(--line); background:#fff; color:var(--mut); font:800 0.8rem var(--font-body); box-shadow:none;}
+  .tchip.on{background:var(--sky); border-color:var(--sky); color:#fff;}
+  .preview{font-family:var(--mono); font-size:0.72rem; color:var(--radar-d); margin-top:8px;}
+  .preview.bad{color:#E0264A;}
+  .online-dot{width:8px;height:8px;border-radius:50%;background:var(--radar);box-shadow:0 0 0 3px #E2F8EE;display:inline-block;}
+  .sg-head{display:flex; align-items:baseline; gap:10px; margin:18px 0 6px;}
+  .sg-head h3{margin:0;}
+  .err-list{font-family:var(--mono); font-size:0.75rem;}
+</style>
+</head>
+<body>
+<div id="toasts"></div>
+
+<!-- ═══ INLOGGEN ═══ -->
+<section id="scr-login" class="card center hidden">
+  <div class="eyebrow">▌▌ Commandocentrum</div>
+  <h1 style="font-size:1.9rem;">Reken<span style="color:var(--radar);">stratego</span> <span style="color:var(--mut); font-size:1rem;">3.0</span></h1>
+  <p class="hint">Log in met je Google-account van school.</p>
+  <button class="btn-go full" id="btn-login">Inloggen met Google</button>
+  <p class="hint" id="login-msg" style="margin-top:12px;"></p>
+</section>
+
+<!-- ═══ KLASSEN ═══ -->
+<section id="scr-classes" class="wrap hidden">
+  <div class="row" style="margin-bottom:14px;">
+    <div><div class="eyebrow">▌ Commandocentrum</div><h2 style="margin:0;">Mijn klassen</h2></div>
+    <div class="spacer"></div>
+    <span class="hint" id="who"></span>
+    <button class="btn-ghost btn-mini" id="btn-logout">Uitloggen</button>
+  </div>
+  <div id="klas-list"></div>
+</section>
+
+<!-- ═══ NIEUWE KLAS ═══ -->
+<section id="scr-wizard" class="wrap hidden" style="max-width:860px;">
+  <div class="row" style="margin-bottom:10px;">
+    <button class="btn-ghost btn-mini" data-go="classes">← Klassen</button>
+  </div>
+  <div class="card">
+    <div class="eyebrow">▌ Nieuwe klas</div>
+    <h2>Klas aanmaken</h2>
+    <label class="lbl" for="wz-name">Naam van de klas</label>
+    <input id="wz-name" placeholder="bijv. Groep 5/6 — 2026/2027" maxlength="40">
+    <p class="hint">Maak per sommengroep een recept en zet er de namen van de leerlingen in.
+      Alle leerlingen spelen samen op één kaart; de sommengroep bepaalt alleen welke sommen ze krijgen.</p>
+  </div>
+  <div id="wz-groups"></div>
+  <div class="row">
+    <button class="btn-line" id="wz-add-group">+ Sommengroep</button>
+    <div class="spacer"></div>
+    <span class="hint" id="wz-summary"></span>
+    <button class="btn-go" id="wz-create">🚀 Klas aanmaken</button>
+  </div>
+</section>
+
+<!-- ═══ DASHBOARD ═══ -->
+<section id="scr-dash" class="wrap hidden">
+  <div class="card tight">
+    <div class="row">
+      <button class="btn-ghost btn-mini" data-go="classes">← Klassen</button>
+      <div>
+        <div class="eyebrow" id="d-eyebrow">▌ Week 1</div>
+        <h2 style="margin:0;" id="d-name"></h2>
+      </div>
+      <div class="codebox"><small>KLASCODE</small><b id="d-code">····</b></div>
+      <span class="chip">📡 <span id="d-online">0</span> online</span>
+      <span class="chip">⚔️ <span id="d-open">0</span> lopend</span>
+      <div class="spacer"></div>
+      <label class="switch" title="Alleen als de War Room open is kunnen leerlingen aanvallen">
+        <input type="checkbox" id="d-war"><span class="track"></span><span id="d-war-lbl">War Room dicht</span>
+      </label>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn-sky btn-mini" id="d-week">📅 Nieuwe week</button>
+      <button class="btn-line btn-mini" id="d-sgroups">🧮 Sommengroepen</button>
+      <button class="btn-line btn-mini" id="d-add">➕ Leerling toevoegen</button>
+      <div class="spacer"></div>
+      <button class="btn-ghost btn-mini" id="d-delete">🗑 Klas verwijderen</button>
+    </div>
+  </div>
+
+  <div id="dash-grid">
+    <div>
+      <div class="card tight">
+        <div class="eyebrow">▌ Strijdgebied</div>
+        <div class="mapbox"><canvas id="d-map"></canvas></div>
+      </div>
+      <div class="card tight">
+        <div class="eyebrow">▌ Leerlingen</div>
+        <div id="d-students"></div>
+      </div>
+    </div>
+    <div class="card tight">
+      <div class="eyebrow">▌ Live logboek</div>
+      <div class="feed" id="d-feed"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ MODALS ═══ -->
+<div class="overlay" id="m-student"><div class="modal">
+  <div class="row"><span class="dot" id="ms-dot"></span><h3 style="margin:0;" id="ms-name"></h3></div>
+  <div id="ms-details" style="margin-top:10px;"></div>
+  <label class="lbl">Sommengroep</label>
+  <div class="row"><select id="ms-sg" class="small" style="flex:1;"></select><button class="btn-line btn-mini" id="ms-move">Verplaats</button></div>
+  <div class="row" style="margin-top:16px;">
+    <button class="btn-warn btn-mini" id="ms-pin">🔑 Reset pincode</button>
+    <button class="btn-sky btn-mini" id="ms-coin">🪙 Geef 1 munt</button>
+    <div class="spacer"></div>
+    <button class="btn-danger btn-mini" id="ms-remove">Verwijderen</button>
+  </div>
+  <button class="btn-ghost full" style="margin-top:12px;" data-close>Sluiten</button>
+</div></div>
+
+<div class="overlay" id="m-week"><div class="modal">
+  <h3 style="color:var(--sky);">📅 Nieuwe week starten</h3>
+  <div id="mw-body"></div>
+  <div class="row" style="margin-top:14px;">
+    <button class="btn-ghost" data-close>Annuleren</button><div class="spacer"></div>
+    <button class="btn-go" id="mw-go">✅ Start nieuwe week</button>
+  </div>
+</div></div>
+
+<div class="overlay" id="m-sgroups"><div class="modal wide">
+  <h3>🧮 Sommengroepen</h3>
+  <p class="hint">Een aangepast recept geldt vanaf de volgende <b>nieuwe week</b>. Wil je het nú toepassen, gebruik dan
+    "Nu opnieuw maken": de leerlingen in die groep beginnen dan opnieuw met tellen (al uitgegeven munten blijven uitgegeven).</p>
+  <div id="msg-groups"></div>
+  <div class="row" style="margin-top:12px;">
+    <button class="btn-line btn-mini" id="msg-add">+ Sommengroep</button><div class="spacer"></div>
+    <button class="btn-ghost" data-close>Sluiten</button>
+    <button class="btn-go" id="msg-save">Opslaan</button>
+  </div>
+</div></div>
+
+<div class="overlay" id="m-add"><div class="modal">
+  <h3>➕ Leerling toevoegen</h3>
+  <label class="lbl" for="ma-name">Naam</label><input id="ma-name" maxlength="40">
+  <label class="lbl" for="ma-sg">Sommengroep</label><select id="ma-sg"></select>
+  <p class="hint">De leerling krijgt een vrij stukje van de kaart (5 hexen) en kiest bij de eerste keer inloggen zelf een pincode.</p>
+  <div class="row"><button class="btn-ghost" data-close>Annuleren</button><div class="spacer"></div><button class="btn-go" id="ma-go">Toevoegen</button></div>
+</div></div>
+
+<script type="module" src="js/leerkracht.js"></script>
+</body>
+</html>

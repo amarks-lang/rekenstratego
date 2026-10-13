@@ -8,7 +8,7 @@
 import {
   COLORS, START_LAND, RESPAWN_LAND, REJOIN_LAND, MAX_FREE_PICKS,
   newId, mulberry32, canonAnswer, milestones, battleResult, lootSize,
-  mapSizeFor, generateMap, buildAdjacency, generateQuestions, findNeutralCluster,
+  mapSizeFor, generateMap, assignColors, buildAdjacency, generateQuestions, findNeutralCluster,
   ownersOf, landCounts, lootOptions, neighbors,
 } from './core.js';
 
@@ -41,11 +41,12 @@ export function createClass({ name, code, students, sgroups, seed = Date.now(), 
   const { W, H } = mapSizeFor(students.length);
   const owners = generateMap(W, H, sids, rng);
   const land = landCounts(owners);
+  const colors = assignColors(owners, W, H, sids);
 
   const roster = {}, pub = {}, priv = {}, map = {};
   students.forEach((s, i) => {
     const sid = sids[i];
-    roster[sid] = { name: String(s.name).trim().slice(0, 40), sg: s.sg, color: COLORS[i % COLORS.length] };
+    roster[sid] = { name: String(s.name).trim().slice(0, 40), sg: s.sg, color: colors[sid] };
     pub[sid] = { land: land[sid] || 0, status: 'active', revenge: false, respawnLeft: 0 };
     priv[sid] = { n: 0, attacks: 0, bonus: 0 };
   });
@@ -60,12 +61,45 @@ export function createClass({ name, code, students, sgroups, seed = Date.now(), 
 
   const updates = {
     [`${ROOT}/codes/${code}`]: cid,
+    [`${ROOT}/classIndex/${cid}`]: { name, code: Number(code), createdAt: TS },
     [C]: {
       meta: { name, week: 1, code: Number(code), warRoomOpen: false, createdAt: TS, W, H },
       roster, sgroups, qsets, answers, public: pub, private: priv, map, adj: buildAdjacency(W, H),
     },
   };
   return { updates, cid, sids };
+}
+
+/** Klas helemaal verwijderen (inclusief code en index). */
+export function deleteClassUpdates(cid, code) {
+  return { [cls(cid)]: null, [`${ROOT}/classIndex/${cid}`]: null, [`${ROOT}/codes/${code}`]: null };
+}
+
+/** Recept van een sommengroep aanpassen (geldt vanaf de volgende nieuwe week). */
+export function sgroupUpdates(cid, sg, def) {
+  return { [`${cls(cid)}/sgroups/${sg}`]: { name: String(def.name).trim().slice(0, 30), recipe: def.recipe } };
+}
+
+/**
+ * Sommen van één sommengroep nú opnieuw maken (bijv. recept aangepast bij de start).
+ * Leerlingen in die groep beginnen met tellen opnieuw; munten die al besteed zijn blijven besteed.
+ */
+export function regenerateNowUpdates(cid, klas, sg, seed = Date.now()) {
+  const u = questionSetUpdates(cid, sg, generateQuestions(klas.sgroups[sg].recipe, mulberry32(seed)));
+  for (const [sid, r] of Object.entries(klas.roster || {})) {
+    if (r.sg !== sg) continue;
+    Object.assign(u, resetProgress(cid, sid));
+  }
+  return u;
+}
+function resetProgress(cid, sid) {
+  const P = `${cls(cid)}/private/${sid}`;
+  return { [`${P}/n`]: 0, [`${P}/solved`]: null, [`${P}/wrong`]: null, [`${P}/last`]: null };
+}
+
+/** Leerling naar een andere sommengroep: telling van deze week begint opnieuw. */
+export function moveStudentUpdates(cid, sid, sg) {
+  return { [`${cls(cid)}/roster/${sid}/sg`]: sg, ...resetProgress(cid, sid) };
 }
 
 export function warRoomUpdates(cid, open) { return { [`${cls(cid)}/meta/warRoomOpen`]: !!open }; }
@@ -84,10 +118,11 @@ export function giveCoinUpdates(cid, sid, priv) {
 export function addStudentUpdates(cid, klas, { name, sg }, rng = Math.random) {
   const C = cls(cid);
   const sid = newId('s', 8);
-  const used = Object.values(klas.roster || {}).map(r => r.color);
-  const color = COLORS.find(c => !used.includes(c)) || COLORS[Object.keys(klas.roster || {}).length % COLORS.length];
   const owners = ownersOf(klas.map);
   const cluster = findNeutralCluster(owners, klas.meta.W, klas.meta.H, REJOIN_LAND, rng);
+  for (const hex of cluster) owners[hex] = sid;
+  const preset = Object.fromEntries(Object.entries(klas.roster || {}).map(([s, r]) => [s, r.color]));
+  const color = assignColors(owners, klas.meta.W, klas.meta.H, [sid], preset)[sid];
   const u = {
     [`${C}/roster/${sid}`]: { name: String(name).trim().slice(0, 40), sg, color },
     [`${C}/public/${sid}`]: { land: cluster.length, status: 'active', revenge: false, respawnLeft: 0 },
